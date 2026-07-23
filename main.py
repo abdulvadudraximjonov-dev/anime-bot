@@ -1,19 +1,13 @@
-import asyncio
-import logging
 import os
 from threading import Thread
-import urllib.parse
-
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from deep_translator import GoogleTranslator
 from flask import Flask
 import requests
 
-# ------------------------------------
-# 1. RENDER UCHUN FLASK PORT SERVER
-# ------------------------------------
+# 1. FLASK PORT SERVER
 app = Flask('')
 
 
@@ -33,143 +27,71 @@ def keep_alive():
   t.start()
 
 
-# Web-serverni ishga tushiramiz
 keep_alive()
 
-# ------------------------------------
-# 2. TELEGRAM BOT SOZLAMALARI
-# ------------------------------------
-TOKEN ="8847420139:AAFj4COfVuZy2l6Xr6WfmkkIQ-kofg0fxMg"
-
+# 2. BOT SOZLAMALARI
+TOKEN = "8847420139:AAFj4COfVuZy2l6Xr6WfmkkIQ-kofg0fxMg"  # Bot tokeningiz
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
 
-# /start komandasi
+# /start komandasi (Tugma bilan)
 @dp.message(CommandStart())
 async def start_cmd(message: types.Message):
+  keyboard = InlineKeyboardMarkup(
+      inline_keyboard=[[
+          InlineKeyboardButton(
+              text='📰 Soʻnggi Anime Yangiliklari', callback_data='get_news'
+          )
+      ]]
+  )
+
   await message.answer(
-      "Assalomu alaykum! Men Anime qidiruvchi botman. 🍿\n\n"
-      "Menga istalgan anime nomini yozib yuboring (masalan: *Naruto*).",
-      parse_mode='Markdown',
+      'Assalomu alaykum! 👋\n\n'
+      'Menga anime nomini yuboring yoki quyidagi tugma orqali soʻnggi yangiliklarni oʻqing:',
+      reply_markup=keyboard,
   )
 
 
-# Anime qidirish
-@dp.message()
-async def search_anime(message: types.Message):
-  query = message.text
-  await message.answer("🔍 Qidirilmoqda, kuting...")
-
-  url = f'https://shikimori.one/api/animes?search={query}&limit=1'
-  headers = {'User-Agent': 'AnimeBot/1.0'}
+# Yangiliklarni olish funksiyasi (Callback)
+@dp.callback_query(lambda c: c.data == 'get_news')
+async def process_news(callback_query: types.CallbackQuery):
+  await callback_query.answer('Yangiliklar yuklanmoqda...')
 
   try:
-    response = requests.get(url, headers=headers).json()
+    # Jikan API orqali eng so'nggi anime yangiliklarini olamiz
+    url = 'https://api.jikan.moe/v4/top/anime?filter=bypopularity&limit=3'
+    response = requests.get(url).json()
 
-    if not response:
-      await message.answer(
-          "❌ Afsuski, bunday anime topilmadi. Nomini to'g'ri yozganingizni"
-          ' tekshiring.'
+    news_text = '🔥 **Eng ommabop va yangi anomslar:**\n\n'
+
+    translator = GoogleTranslator(source='en', target='uz')
+
+    for item in response.get('data', []):
+      title = item.get('title')
+      score = item.get('score', 'N/A')
+      synopsis = item.get('synopsis', 'Tavsif yoq')[:150]  # Qisqacha matn
+
+      # O'zbekchaga tarjima qilish
+      try:
+        translated_synopsis = translator.translate(synopsis)
+      except:
+        translated_synopsis = synopsis
+
+      news_text += (
+          f'🎬 **{title}**\n⭐ Baha: {score}\n📝 {translated_synopsis}...\n\n---\n'
       )
-      return
 
-    anime = response[0]
-    anime_id = anime['id']
-
-    detail_url = f'https://shikimori.one/api/animes/{anime_id}'
-    detail = requests.get(detail_url, headers=headers).json()
-
-    title_ru = detail.get('russian') or detail.get('name')
-    title_eng = detail.get('name')
-    episodes = detail.get('episodes', "Noma'lum")
-    score = detail.get('score', 'Baholanmagan')
-    status = detail.get('status', "Noma'lum")
-
-    status_dict = {
-        'released': 'Tugallangan 🏁',
-        'ongoing': 'Davom etmoqda 🔄',
-        'anons': 'Afisha / Anons 📣',
-    }
-    status_uz = status_dict.get(status, "Noma'lum")
-
-    caption = (
-        f'🎬 **Nomi:** {title_ru} ({title_eng})\n\n'
-        f'⭐️ **Baho:** {score} / 10\n'
-        f'📺 **Qismlar soni:** {episodes}\n'
-        f'📌 **Holati:** {status_uz}'
-    )
-
-    image_url = f"https://shikimori.one{anime['image']['original']}"
-    shikimori_url = f"https://shikimori.one{anime['url']}"
-
-    search_query = urllib.parse.quote(f'{title_eng} anime uzbek tilida')
-    watch_url = f'https://www.google.com/search?q={search_query}'
-
-    builder = InlineKeyboardBuilder()
-    builder.row(
-        types.InlineKeyboardButton(
-            text="🎬 Ko'rish / Tomosha qilish", url=watch_url
-        )
-    )
-    builder.row(
-        types.InlineKeyboardButton(
-            text="📖 Tavsifni o'qish (O'zbekcha)",
-            callback_data=f'desc_{anime_id}',
-        )
-    )
-    builder.row(
-        types.InlineKeyboardButton(
-            text="🌐 Rasmiy saytda ko'rish", url=shikimori_url
-        )
-    )
-
-    await message.answer_photo(
-        photo=image_url,
-        caption=caption,
-        reply_markup=builder.as_markup(),
-        parse_mode='Markdown',
-    )
+    await callback_query.message.answer(news_text, parse_mode='Markdown')
 
   except Exception as e:
-    logging.error(f'Xatolik: {e}')
-    await message.answer('⚠️ Qidiruv vaqtida xatolik yuz berdi.')
-
-
-# Tavsif tugmasi bosilganda
-@dp.callback_query(lambda c: c.data.startswith('desc_'))
-async def show_description(callback_query: types.CallbackQuery):
-  await callback_query.answer('⏳ Tavsif o\'zbek tiliga tarjima qilinmoqda...')
-
-  anime_id = callback_query.data.split('_')[1]
-  detail_url = f'https://shikimori.one/api/animes/{anime_id}'
-  headers = {'User-Agent': 'AnimeBot/1.0'}
-
-  try:
-    detail = requests.get(detail_url, headers=headers).json()
-    description = detail.get('description', 'Tavsif topilmadi.')
-
-    if description and description != 'Tavsif topilmadi.':
-      translator = GoogleTranslator(source='auto', target='uz')
-      translated_desc = translator.translate(description)
-    else:
-      translated_desc = "Ushbu anime uchun tavsif mavjud emas."
-
     await callback_query.message.answer(
-        f"📖 **Tavsif (O'zbekcha):**\n\n{translated_desc}",
-        parse_mode='Markdown',
+        'Yangiliklarni yuklashda xatolik yuz berdi.'
     )
-  except Exception as e:
-    logging.error(f'Tarjima xatosi: {e}')
-    await callback_query.message.answer(
-        "⚠️ Tavsifni yuklashda xatolik yuz berdi."
-    )
-
-
-async def main():
-  await dp.start_polling(bot)
 
 
 if __name__ == '__main__':
-  asyncio.run(main())
-                   
+  import asyncio
+
+  asyncio.run(dp.start_polling(bot))
+  
