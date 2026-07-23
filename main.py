@@ -39,7 +39,7 @@ keep_alive()
 # ------------------------------------
 # 2. TELEGRAM BOT SOZLAMALARI
 # ------------------------------------
-TOKEN = '8047420139:AAEic2tb24AuV2PzDVhsDQ1m2w9i1NYi1Wg'
+TOKEN ="8847420139:AAFj4COfVuZy2l6Xr6WfmkkIQ-kofg0fxMg"
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
