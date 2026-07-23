@@ -15,7 +15,7 @@ from deep_translator import GoogleTranslator
 from flask import Flask
 import requests
 
-# 1. FLASK PORT SERVER
+# 1. FLASK SERVER
 app = Flask('')
 
 
@@ -38,17 +38,19 @@ def keep_alive():
 keep_alive()
 
 # 2. BOT SOZLAMALARI
-TOKEN = "8847420139:AAFj4COfVuZy2l6Xr6WfmkkIQ-kofg0fxMg"  # Bot tokeningizni shu yerga yozing
+TOKEN = "8847420139:AAFj4COfVuZy2l6Xr6WfmkkIQ-kofg0fxMg"  # Botfather'dan olgan tokeningizni yozing
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
+
+HEADERS = {'User-Agent': 'AnimeUzBot/1.0'}
 
 
 class UserState(StatesGroup):
   waiting_for_anime_name = State()
 
 
-# MAIN PASTA TURADIGAN 4 TA TUGMA
+# 4 TA ASOSIY TUGMA
 main_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [
@@ -74,67 +76,59 @@ async def start_cmd(message: types.Message, state: FSMContext):
   )
 
 
-# 1. TOP 15 ANIME
+# 1. TOP 15 ANIME (SHIKIMORI BAZASI)
 @dp.message(lambda m: m.text == '🔍 Top 15 Anime')
 async def top_15_anime(message: types.Message):
-  msg = await message.answer('⏳ Eng sifatli 15 ta anime yuklanmoqda...')
+  msg = await message.answer('⏳ Eng mashhur 15 ta anime yuklanmoqda...')
   try:
-    url = 'https://api.jikan.moe/v4/top/anime?limit=15'
-    res = requests.get(url, timeout=10)
-    data = res.json().get('data', [])
+    url = 'https://shikimori.one/api/animes?limit=15&order=popularity'
+    res = requests.get(url, headers=HEADERS, timeout=10)
+    data = res.json()
 
     if not data:
-      await msg.edit_text(
-          "❌ Ma'lumot olib bo'lmadi. Qaytadan urinib ko'ring."
-      )
+      await msg.edit_text('❌ Maʻlumot olib boʻlmadi.')
       return
 
-    text = '🔥 **Top 15 Eng Sifatli Animelar:**\n\n'
+    text = '🔥 **Top 15 Eng Mashhur Animelar:**\n\n'
     for idx, item in enumerate(data, 1):
-      title = item.get('title')
+      name = item.get('russian') or item.get('name')
       score = item.get('score', 'N/A')
-      text += f'{idx}. **{title}** — ⭐ {score}\n'
+      text += f'{idx}. **{name}** — ⭐ {score}\n'
 
     text += (
         "\n💡 *Batafsil ma'lumot olish uchun anime nomini chatga yozing!*"
     )
     await msg.edit_text(text, parse_mode='Markdown')
   except Exception:
-    await msg.edit_text(
-        "⚠️ Network xatosi yuz berdi. Bir ozdan so'ng urining."
-    )
+    await msg.edit_text('⚠️ Server bilan aloqa uzildi. Qayta urinib koʻring.')
 
 
-# 2. SO'NGGI YANGILIKLAR
+# 2. SO'NGGI YANGILIKLAR (HOZIR EFIRDA KETAYOTGAN ANIMELAR)
 @dp.message(lambda m: m.text == '📰 Soʻnggi Yangiliklar')
 async def latest_news(message: types.Message):
   msg = await message.answer(
       '⏳ Bugungi va soʻnggi yangiliklar yuklanmoqda...'
   )
   try:
-    url = 'https://api.jikan.moe/v4/seasons/now?limit=3'
-    res = requests.get(url, timeout=10)
-    data = res.json().get('data', [])
+    url = 'https://shikimori.one/api/animes?limit=5&status=ongoing&order=popularity'
+    res = requests.get(url, headers=HEADERS, timeout=10)
+    data = res.json()
 
     if not data:
       await msg.edit_text('❌ Yangiliklar topilmadi.')
       return
 
-    translator = GoogleTranslator(source='en', target='uz')
-    news_text = '📰 **Hozirgi mavsumda chiqqan yangiliklar va animelar:**\n\n'
+    news_text = '📰 **Hozirda efirga uzatilayotgan eng soʻnggi animelar:**\n\n'
 
     for item in data:
-      title = item.get('title')
-      synopsis = item.get('synopsis', '')[:150]
+      name = item.get('russian') or item.get('name')
+      episodes = item.get('episodes_Aired', 0)
+      score = item.get('score', 'N/A')
 
-      try:
-        translated_synopsis = (
-            translator.translate(synopsis) if synopsis else 'Tavsif yoʻq'
-        )
-      except:
-        translated_synopsis = synopsis
-
-      news_text += f'🎬 **{title}**\n📝 {translated_synopsis}...\n\n---\n'
+      news_text += (
+          f'🎬 **{name}**\n📌 Chiqqan qismlari: {episodes}-qism\n⭐ Baho:'
+          f' {score}\n\n---\n'
+      )
 
     await msg.edit_text(news_text, parse_mode='Markdown')
   except Exception:
@@ -187,45 +181,50 @@ async def process_anime_watch_search(
   )
 
 
-# ANIME QIDIRUV VA TARJIMA
+# ANIME QIDIRUV VA TAVSIF
 @dp.message()
 async def search_and_translate(message: types.Message):
   query = message.text
   msg = await message.answer(f'🔍 *{query}* boʻyicha qidirilmoqda...')
 
   try:
-    # API orqali qidirish (Sarlavha bo'yicha)
-    url = f'https://api.jikan.moe/v4/anime?q={urllib.parse.quote(query)}&limit=1'
-    res = requests.get(url, timeout=10)
-
-    if res.status_code != 200:
-      await msg.edit_text('❌ API serveri vaqtincha javob bermayapti.')
-      return
-
-    data = res.json().get('data', [])
+    # Shikimori orqali qidirish
+    search_url = (
+        f'https://shikimori.one/api/animes?search={urllib.parse.quote(query)}&limit=1'
+    )
+    res = requests.get(search_url, headers=HEADERS, timeout=10)
+    data = res.json()
 
     if not data:
       await msg.edit_text(
-          f'❌ Afsuski, *{query}* nomli anime topilmadi.\n'
-          '💡 *Maslahat:* Qahramon ismini emas, rasmiy anime nomini yozib ko\'ring.',
+          f'❌ Afsuski, *{query}* nomli anime topilmadi.',
           parse_mode='Markdown',
       )
       return
 
-    anime = data[0]
-    title = anime.get('title', query)
+    anime_id = data[0]['id']
+
+    # Anime batafsil ma'lumotini olish
+    detail_url = f'https://shikimori.one/api/animes/{anime_id}'
+    detail_res = requests.get(detail_url, headers=HEADERS, timeout=10)
+    anime = detail_res.json()
+
+    title = anime.get('russian') or anime.get('name')
     score = anime.get('score', 'N/A')
-    episodes = anime.get('episodes', 'Noma\'lum')
-    synopsis = anime.get('synopsis', '')
-    image_url = anime.get('images', {}).get('jpg', {}).get('image_url')
+    episodes = anime.get('episodes') or anime.get('episodes_Aired') or 'Noma\'lum'
+    description = anime.get('description_source') or anime.get('description') or ''
+    image_path = anime.get('image', {}).get('original')
+    image_url = (
+        f'https://shikimori.one{image_path}' if image_path else None
+    )
 
     # Tavsifni tarjima qilish
-    if synopsis:
+    if description:
       try:
         translator = GoogleTranslator(source='auto', target='uz')
-        translated_synopsis = translator.translate(synopsis[:350])
+        translated_synopsis = translator.translate(description[:400])
       except:
-        translated_synopsis = synopsis[:350]
+        translated_synopsis = description[:400]
     else:
       translated_synopsis = 'Tavsif mavjud emas.'
 
@@ -260,7 +259,7 @@ async def search_and_translate(message: types.Message):
           caption, reply_markup=watch_keyboard, parse_mode='Markdown'
       )
 
-  except Exception as e:
+  except Exception:
     await msg.edit_text('❌ Qidiruvda vaqtinchalik xatolik yuz berdi.')
 
 
@@ -268,4 +267,3 @@ if __name__ == '__main__':
   import asyncio
 
   asyncio.run(dp.start_polling(bot))
-      
