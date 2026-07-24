@@ -1,4 +1,2 @@
-aiogram
-requests
-deep-translator
-flask
+pyTelegramBotAPI
+groq
