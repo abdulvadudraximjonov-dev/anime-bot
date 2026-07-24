@@ -1,369 +1,223 @@
 import os
-from threading import Thread
-import urllib.parse
-from aiogram import Bot, Dispatcher, types
-from aiogram.filters import CommandStart
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import (
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    KeyboardButton,
-    ReplyKeyboardMarkup,
-)
-from deep_translator import GoogleTranslator
-from flask import Flask
-import requests
+import telebot
+import base64
+from groq import Groq
 
-# 1. FLASK PORT SERVER
-app = Flask('')
+BOT_TOKEN = "8883779714:AAE4TUVrrdwZm1GEiZr3Q5yifUZ3bsawX8Y"
 
+# Siz bergan yangi Groq API Kalit
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "Gsk_I4yGI3DaGhyhegHXjBg0WGdyb3FYY0XUxwZfYxtagdNhMBY380HD")
 
-@app.route('/')
-def home():
-  return 'Bot 24/7 ishlamoqda!'
+bot = telebot.TeleBot(BOT_TOKEN)
+client = Groq(api_key=GROQ_API_KEY)
 
+# Asosiy menyu keyboard
+def main_keyboard():
+    markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.row("🇬🇧 Ingliz darsida yordam")
+    markup.row("🖼 Rasm orqali yordam", "✍️ Yozuv orqali yordam")
+    markup.row("🎙 Ovozli xabar orqali yordam")
+    markup.row("📚 Destination A1 (Bo'limlar)")
+    return markup
 
-def run():
-  port = int(os.environ.get('PORT', 10000))
-  app.run(host='0.0.0.0', port=port)
+# Destination A1 unitlari uchun tugmalar menyusi
+def vocab_menu():
+    markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.row("📌 1 - 5 Unitlar", "📌 6 - 10 Unitlar")
+    markup.row("📌 11 - 15 Unitlar", "📌 16 - 20 Unitlar")
+    markup.row("📌 21 - 25 Unitlar", "📌 26 - 30 Unitlar")
+    markup.row("📌 31 - 35 Unitlar", "📌 36 - 40 Unitlar")
+    markup.row("📌 41 - 45 Unitlar", "📌 46 - 50 Unitlar")
+    markup.row("⬅️ Bosh menyuga qaytish")
+    return markup
 
-
-def keep_alive():
-  t = Thread(target=run)
-  t.daemon = True
-  t.start()
-
-
-keep_alive()
-
-# 2. BOT SOZLAMALARI
-TOKEN = "8847420139:AAFj4COfVuZy2l6Xr6WfmkkIQ-kofg0fxMg"  # BotFather tokeningiz
-CHANNEL_USERNAME = "@Ongoing animelar"  # Masalan: @anime_uz_kanali
-CHANNEL_URL = "https://t.me/anime_team_01"  # Kanal havolasi
-
-bot = Bot(token=TOKEN)
-dp = Dispatcher()
-HEADERS = {'User-Agent': 'AnimeUzBot/1.0'}
-
-
-class UserState(StatesGroup):
-  waiting_for_anime_name = State()
-
-
-# TUGMALAR MENYUSI
-main_keyboard = ReplyKeyboardMarkup(
-    keyboard=[
-        [
-            KeyboardButton(text='🔍 Top 15 Anime'),
-            KeyboardButton(text='📰 Soʻnggi Yangiliklar'),
-        ],
-        [
-            KeyboardButton(text='🎲 Tasodifiy Anime'),
-            KeyboardButton(text='🎬 Tomosha qilish'),
-        ],
-        [
-            KeyboardButton(text='🇺🇿 Oʻzbekcha Tavsif'),
-            KeyboardButton(text='📢 Kanalimiz'),
-        ],
-    ],
-    resize_keyboard=True,
-)
-
-
-# OBUNANI TEKSHIRISH FUNKSIYASI
-async def check_sub(user_id: int) -> bool:
-  try:
-    member = await bot.get_chat_member(
-        chat_id=CHANNEL_USERNAME, user_id=user_id
+@bot.message_handler(commands=['start'])
+def start_cmd(message):
+    bot.send_message(
+        message.chat.id, 
+        "Xush kelibsiz! Menga matn, savol yoki rasm yuboring, AI javob beradi!", 
+        reply_markup=main_keyboard()
     )
-    if member.status in ['creator', 'administrator', 'member']:
-      return True
-    return False
-  except Exception:
-    return True  # Kanal sozlanmagan bo'lsa o'tkazib yuboradi
 
+# Bo'lim tugmalarini boshqarish
+@bot.message_handler(func=lambda m: m.text == "📚 Destination A1 (Bo'limlar)")
+def open_vocab_menu(message):
+    bot.send_message(message.chat.id, "Kerakli unitlar oralig'ini tanlang:", reply_markup=vocab_menu())
 
-# /start KOMANDASI
-@dp.message(CommandStart())
-async def start_cmd(message: types.Message, state: FSMContext):
-  await state.clear()
-  is_subbed = await check_sub(message.from_user.id)
+@bot.message_handler(func=lambda m: m.text == "⬅️ Bosh menyuga qaytish")
+def back_to_main(message):
+    bot.send_message(message.chat.id, "Bosh menyudasiz.", reply_markup=main_keyboard())
 
-  if not is_subbed:
-    sub_keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text='📢 Kanalga obuna boʻlish', url=CHANNEL_URL
-                )
+# --- LUG'AT BO'LIMLARI ---
+
+@bot.message_handler(func=lambda m: m.text == "📌 1 - 5 Unitlar")
+def unit_1_5(message):
+    text = (
+        "📘 *Destination A1: 1 - 5 Unitlar*\n\n"
+        "🔹 *Unit 1: Present Simple*\n• Family – Oila | Friend – Do'st | Live – Yashamoq\n\n"
+        "🔹 *Unit 2: Present Continuous*\n• Play – O'ynamoq | Read – O'qimoq | Write – Yozmoq\n\n"
+        "🔹 *Unit 3: School & Education*\n• Teacher – O'qituvchi | Student – O'quvchi | Class – Sinf\n\n"
+        "🔹 *Unit 4: Past Simple*\n• Go (went) – Bormoq | See (saw) – Ko'rmoq | Buy – Sotib olmoq\n\n"
+        "🔹 *Unit 5: Food & Drink*\n• Apple – Olma | Water – Suv | Bread – Non | Meat – Go'sht"
+    )
+    bot.send_message(message.chat.id, text, parse_mode="Markdown")
+
+@bot.message_handler(func=lambda m: m.text == "📌 6 - 10 Unitlar")
+def unit_6_10(message):
+    text = (
+        "📘 *Destination A1: 6 - 10 Unitlar*\n\n"
+        "🔹 *Unit 6: Past Continuous*\n• Sleep – Uxlamoq | Walk – Yurmoq | Cook – Ovqat qilmoq\n\n"
+        "🔹 *Unit 7: Jobs & Work*\n• Doctor – Shifokor | Driver – Haydovchi | Worker – Ishchi\n\n"
+        "🔹 *Unit 8: Present Perfect*\n• Already – Allaqachon | Just – Hozirgina | Never – Hech qachon\n\n"
+        "🔹 *Unit 9: Places & Buildings*\n• City – Shahar | Hospital – Kasalxona | Shop – Do'kon\n\n"
+        "🔹 *Unit 10: Adjectives*\n• Big – Katta | Small – Kichik | Happy – Xursand | Fast – Tez"
+    )
+    bot.send_message(message.chat.id, text, parse_mode="Markdown")
+
+@bot.message_handler(func=lambda m: m.text == "📌 11 - 15 Unitlar")
+def unit_11_15(message):
+    text = (
+        "📘 *Destination A1: 11 - 15 Unitlar*\n\n"
+        "🔹 *Unit 11: Transport*\n• Bus – Avtobus | Car – Mashina | Train – Poezd\n\n"
+        "🔹 *Unit 12: Weather & Nature*\n• Sun – Quyosh | Rain – Yag'ir | Hot – Issiq | Cold – Sovuq\n\n"
+        "🔹 *Unit 13: Hobbies*\n• Music – Musiqa | Sport – Sport | Dance – Raqs tushmoq\n\n"
+        "🔹 *Unit 14: Clothes*\n• Shirt – Ko'ylak | Shoes – Oyoq kiyim | Wear – Kiymoq\n\n"
+        "🔹 *Unit 15: Revision 1*\n• Review – Takrorlash | Exercise – Mashq | Answer – Javob"
+    )
+    bot.send_message(message.chat.id, text, parse_mode="Markdown")
+
+@bot.message_handler(func=lambda m: m.text == "📌 16 - 20 Unitlar")
+def unit_16_20(message):
+    text = (
+        "📘 *Destination A1: 16 - 20 Unitlar*\n\n"
+        "🔹 *Unit 16: Time & Dates*\n• Today – Bugun | Tomorrow – Ertaga | Clock – Soat\n\n"
+        "🔹 *Unit 17: Family & Relatives*\n• Uncle – Amaki/Tog'a | Aunt – Amma/Xola | Cousin – Balo\n\n"
+        "🔹 *Unit 18: Body & Health*\n• Head – Bosh | Hand – Qo'l | Sick – Kasal\n\n"
+        "🔹 *Unit 19: House & Home*\n• Room – Xona | Kitchen – Oshxona | Chair – Stul\n\n"
+        "🔹 *Unit 20: Prepositions*\n• In – Ichida | On – Ustida | Under – Ostida"
+    )
+    bot.send_message(message.chat.id, text, parse_mode="Markdown")
+
+@bot.message_handler(func=lambda m: m.text == "📌 21 - 25 Unitlar")
+def unit_21_25(message):
+    text = (
+        "📘 *Destination A1: 21 - 25 Unitlar*\n\n"
+        "🔹 *Unit 21: Shopping*\n• Price – Narx | Pay – To'lamoq | Cheap – Arzon\n\n"
+        "🔹 *Unit 22: Feelings*\n• Sad – Xafa | Angry – Jahli chiqqan | Tired – Charchagan\n\n"
+        "🔹 *Unit 23: Animals*\n• Dog – It | Cat – Mushuk | Bird – Qush | Lion – Sher\n\n"
+        "🔹 *Unit 24: Travel*\n• Ticket – Bilet | Hotel – Mehmonxona | Map – Xarita\n\n"
+        "🔹 *Unit 25: Revision 2*\n• Practice – Amaliyot | Test – Sinov | Score – Ball"
+    )
+    bot.send_message(message.chat.id, text, parse_mode="Markdown")
+
+@bot.message_handler(func=lambda m: m.text == "📌 26 - 30 Unitlar")
+def unit_26_30(message):
+    text = (
+        "📘 *Destination A1: 26 - 30 Unitlar*\n\n"
+        "🔹 *Unit 26: Future (Will)*\n• Tomorrow – Ertaga | Hope – Umid qilmoq | Think – O'ylamoq\n\n"
+        "🔹 *Unit 27: Modals (Can/Must)*\n• Ability – Qobiliyat | Rule – Qoida | Must – Majbur bo'lmoq\n\n"
+        "🔹 *Unit 28: Technology*\n• Phone – Telefon | Computer – Kompyuter | Internet – Internet\n\n"
+        "🔹 *Unit 29: Daily Routine*\n• Wake up – Uyg'onmoq | Wash – Yuvinmoq | Work – Ishlamoq\n\n"
+        "🔹 *Unit 30: Revision 3*\n• Summary – Xulosa | Repeat – Takrorlamoq"
+    )
+    bot.send_message(message.chat.id, text, parse_mode="Markdown")
+
+@bot.message_handler(func=lambda m: m.text == "📌 31 - 35 Unitlar")
+def unit_31_35(message):
+    text = (
+        "📘 *Destination A1: 31 - 35 Unitlar*\n\n"
+        "🔹 *Unit 31: Comparatives*\n• Better – Yaxshiroq | Faster – Tezroq | Taller – Balandroq\n\n"
+        "🔹 *Unit 32: Superlatives*\n• The best – Eng yaxshisi | The biggest – Eng kattasi\n\n"
+        "🔹 *Unit 33: Environment*\n• Tree – Daraxt | Flower – Gul | Clean – Toza\n\n"
+        "🔹 *Unit 34: Media & News*\n• TV – Televizor | Newspaper – Gazeta | News – Yangiliklar\n\n"
+        "🔹 *Unit 35: Revision 4*\n• Check – Tekshirmoq | Correct – To'g'rilamoq"
+    )
+    bot.send_message(message.chat.id, text, parse_mode="Markdown")
+
+@bot.message_handler(func=lambda m: m.text == "📌 36 - 40 Unitlar")
+def unit_36_40(message):
+    text = (
+        "📘 *Destination A1: 36 - 40 Unitlar*\n\n"
+        "🔹 *Unit 36: Passive Voice*\n• Built – Qurilgan | Made – Yasalgan | Written – Yozilgan\n\n"
+        "🔹 *Unit 37: Conditionals (If)*\n• If – Agar | Unless – Agar ... bo'lmasa | Result – Natija\n\n"
+        "🔹 *Unit 38: Money & Finance*\n• Bank – Bank | Card – Karta | Save – Tejamoq\n\n"
+        "🔹 *Unit 39: Celebrations*\n• Party – Bazm | Gift – Sovg'a | Celebrate – Nishonlamoq\n\n"
+        "🔹 *Unit 40: Revision 5*\n• Final Review – Yakuniy takrorlash"
+    )
+    bot.send_message(message.chat.id, text, parse_mode="Markdown")
+
+@bot.message_handler(func=lambda m: m.text == "📌 41 - 45 Unitlar")
+def unit_41_45(message):
+    text = (
+        "📘 *Destination A1: 41 - 45 Unitlar*\n\n"
+        "🔹 *Unit 41: Reported Speech*\n• Say – Aytmoq | Tell – Gapirib bermoq | Ask – So'ramoq\n\n"
+        "🔹 *Unit 42: Phrasal Verbs 1*\n• Get up – O'rindan turmoq | Turn on – Yoqmoq\n\n"
+        "🔹 *Unit 43: Phrasal Verbs 2*\n• Look for – Qidirmoq | Give up – Taslim bo'lmoq\n\n"
+        "🔹 *Unit 44: Prepositional Phrases*\n• At home – Uyda | On time – Vaqtida\n\n"
+        "🔹 *Unit 45: Revision 6*\n• Advanced Practice – Murakkab mashqlar"
+    )
+    bot.send_message(message.chat.id, text, parse_mode="Markdown")
+
+@bot.message_handler(func=lambda m: m.text == "📌 46 - 50 Unitlar")
+def unit_46_50(message):
+    text = (
+        "📘 *Destination A1: 46 - 50 Unitlar*\n\n"
+        "🔹 *Unit 46: Collocations*\n• Make a decision – Qaror qilmoq | Do homework – Uyga vazifa qilmoq\n\n"
+        "🔹 *Unit 47: Word Formation*\n• Happy -> Happiness | Teacher -> Teaching\n\n"
+        "🔹 *Unit 48: Idioms*\n• Piece of cake – Juda oson | Break a leg – Omad yor bo'lsin\n\n"
+        "🔹 *Unit 49: General Vocabulary*\n• Complete – To'liq | Global – Umumiy | Useful – Foydali\n\n"
+        "🔹 *Unit 50: Final Test Review*\n• Certificate – Sertifikat | Exam – Imtihon | Success – Muvaffaqiyat"
+    )
+    bot.send_message(message.chat.id, text, parse_mode="Markdown")
+
+# RASMLARNI TAHLIL QILISH
+@bot.message_handler(content_types=['photo'])
+def handle_photo(message):
+    msg = bot.reply_to(message, "⏳ Rasm tahlil qilinmoqda...")
+    try:
+        file_info = bot.get_file(message.photo[-1].file_id)
+        downloaded_file = bot.download_file(file_info.file_path)
+        base64_image = base64.b64encode(downloaded_file).decode('utf-8')
+
+        caption = message.caption if message.caption else "Ushbu rasmdagi savol yoki masalani yechib, o'zbek tilida tushuntirib ber."
+
+        completion = client.chat.completions.create(
+            model="llama-3.2-11b-vision-preview",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": caption},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                    ]
+                }
             ],
-            [
-                InlineKeyboardButton(
-                    text='✅ Obunani tekshirish', callback_data='check_subscription'
-                )
+            temperature=0.7
+        )
+
+        response_text = completion.choices[0].message.content
+        bot.edit_message_text(response_text, message.chat.id, msg.message_id)
+    except Exception as e:
+        bot.edit_message_text(f"Xatolik: {e}", message.chat.id, msg.message_id)
+
+# MATNLI SAVOLLAR
+@bot.message_handler(func=lambda message: True)
+def handle_text(message):
+    msg = bot.reply_to(message, "⏳ AI o'ylanmoqda...")
+    try:
+        completion = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": "Siz aqlli va yordamchi AI assistentsiz. O'zbek tilida aniq javob bering."},
+                {"role": "user", "content": message.text}
             ],
-        ]
-    )
-    await message.answer(
-        '👋 Botdan foydalanish uchun avval kanalimizga obuna boʻling:',
-        reply_markup=sub_keyboard,
-    )
-    return
+            temperature=0.7
+        )
+        response_text = completion.choices[0].message.content
+        bot.edit_message_text(response_text, message.chat.id, msg.message_id)
+    except Exception as e:
+        bot.edit_message_text(f"Xatolik: {e}", message.chat.id, msg.message_id)
 
-  await message.answer(
-      'Assalomu alaykum! 👋\nAnime botimizga xush kelibsiz! Boʻlimni tanlang:',
-      reply_markup=main_keyboard,
-  )
-
-
-# OBUNANI TEKSHIRISH TUGMASI (CALLBACK)
-@dp.callback_query(lambda c: c.data == 'check_subscription')
-async def callback_check_sub(callback_query: types.CallbackQuery):
-  is_subbed = await check_sub(callback_query.from_user.id)
-  if is_subbed:
-    await callback_query.message.delete()
-    await callback_query.message.answer(
-        '✅ Rahmat! Endi botdan toʻliq foydalanishingiz mumkin.',
-        reply_markup=main_keyboard,
-    )
-  else:
-    await callback_query.answer('❌ Hali kanalga obuna boʻlmadingiz!', show_alert=True)
-
-
-# 1. TOP 15 ANIME
-@dp.message(lambda m: m.text == '🔍 Top 15 Anime')
-async def top_15_anime(message: types.Message):
-  msg = await message.answer('⏳ Yuklanmoqda...')
-  try:
-    res = requests.get(
-        'https://shikimori.one/api/animes?limit=15&order=popularity',
-        headers=HEADERS,
-        timeout=10,
-    )
-    data = res.json()
-
-    text = '🔥 **Top 15 Eng Mashhur Animelar:**\n\n'
-    for idx, item in enumerate(data, 1):
-      name = item.get('russian') or item.get('name')
-      score = item.get('score', 'N/A')
-      text += f'{idx}. **{name}** — ⭐ {score}\n'
-
-    await msg.edit_text(text, parse_mode='Markdown')
-  except Exception:
-    await msg.edit_text('⚠️ Xatolik yuz berdi.')
-
-
-# 2. SO'NGGI YANGILIKLAR
-@dp.message(lambda m: m.text == '📰 Soʻnggi Yangiliklar')
-async def latest_news(message: types.Message):
-  msg = await message.answer('⏳ Yuklanmoqda...')
-  try:
-    res = requests.get(
-        'https://shikimori.one/api/animes?limit=5&status=ongoing&order=popularity',
-        headers=HEADERS,
-        timeout=10,
-    )
-    data = res.json()
-
-    news_text = '📰 **Hozirda efirga uzatilayotgan animelar:**\n\n'
-    for item in data:
-      name = item.get('russian') or item.get('name')
-      episodes = item.get('episodes_Aired', 0)
-      score = item.get('score', 'N/A')
-      news_text += (
-          f'🎬 **{name}**\n📌 Chiqqan qismi: {episodes}\n⭐ Baho:'
-          f' {score}\n\n---\n'
-      )
-
-    await msg.edit_text(news_text, parse_mode='Markdown')
-  except Exception:
-    await msg.edit_text('⚠️ Xatolik yuz berdi.')
-
-
-# 3. TASODIFIY ANIME (YANGI FUNKSIYA)
-@dp.message(lambda m: m.text == '🎲 Tasodifiy Anime')
-async def random_anime(message: types.Message):
-  msg = await message.answer('🎲 Siz uchun anime tanlanmoqda...')
-  try:
-    import random
-
-    page = random.randint(1, 10)
-    res = requests.get(
-        f'https://shikimori.one/api/animes?page={page}&limit=20&order=popularity',
-        headers=HEADERS,
-        timeout=10,
-    )
-    data = res.json()
-    anime = random.choice(data)
-
-    name = anime.get('russian') or anime.get('name')
-    score = anime.get('score', 'N/A')
-    image_path = anime.get('image', {}).get('original')
-    image_url = (
-        f'https://shikimori.one{image_path}' if image_path else None
-    )
-
-    caption = (
-        f'🎲 **Siz uchun tasodifiy tavsiya:**\n\n🎬 **{name}**\n⭐ Baho: {score}'
-    )
-    encoded_title = urllib.parse.quote(name)
-    watch_keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[[
-            InlineKeyboardButton(
-                text='🎬 Telegramda tomosha qilish',
-                url=f'https://t.me/search?q={encoded_title}',
-            )
-        ]]
-    )
-
-    await msg.delete()
-    if image_url:
-      await message.answer_photo(
-          photo=image_url,
-          caption=caption,
-          reply_markup=watch_keyboard,
-          parse_mode='Markdown',
-      )
-    else:
-      await message.answer(
-          caption, reply_markup=watch_keyboard, parse_mode='Markdown'
-      )
-  except Exception:
-    await msg.edit_text('❌ Qayta urinib koʻring.')
-
-
-# 4. TOMOSHA QILISH
-@dp.message(lambda m: m.text == '🎬 Tomosha qilish')
-async def watch_anime_prompt(message: types.Message, state: FSMContext):
-  await state.set_state(UserState.waiting_for_anime_name)
-  await message.answer(
-      '🎬 Qaysi animeni tomosha qilmoqchisiz?\nNomini yozing (masalan:'
-      ' `Naruto`):',
-      parse_mode='Markdown',
-  )
-
-
-@dp.message(UserState.waiting_for_anime_name)
-async def process_anime_watch_search(
-    message: types.Message, state: FSMContext
-):
-  anime_name = message.text
-  await state.clear()
-  encoded_name = urllib.parse.quote(anime_name)
-
-  watch_keyboard = InlineKeyboardMarkup(
-      inline_keyboard=[[
-          InlineKeyboardButton(
-              text=f'🔍 "{anime_name}"ni topish',
-              url=f'https://t.me/search?q={encoded_name}',
-          )
-      ]]
-  )
-  await message.answer(
-      f'🍿 **{anime_name}** uchun qidiruv tugmasi:',
-      reply_markup=watch_keyboard,
-      parse_mode='Markdown',
-  )
-
-
-# 5. O'ZBEKCHA TAVSIF HAQIDA
-@dp.message(lambda m: m.text == '🇺🇿 Oʻzbekcha Tavsif')
-async def uzbek_description_info(message: types.Message):
-  await message.answer(
-      '🇺🇿 Anime haqida oʻzbekcha tavsif olish uchun chatga **anime nomini**'
-      ' yozing!'
-  )
-
-
-# 6. KANALIMIZ TUGMASI
-@dp.message(lambda m: m.text == '📢 Kanalimiz')
-async def channel_info(message: types.Message):
-  channel_keyboard = InlineKeyboardMarkup(
-      inline_keyboard=[[
-          InlineKeyboardButton(text='📢 Kanalga oʻtish', url=CHANNEL_URL)
-      ]]
-  )
-  await message.answer(
-      'Bizning rasmiy kanalimizga aʼzo boʻling:', reply_markup=channel_keyboard
-  )
-
-
-# ANIME QIDIRUV VA TARJIMA
-@dp.message()
-async def search_and_translate(message: types.Message):
-  query = message.text
-  msg = await message.answer(f'🔍 *{query}* boʻyicha qidirilmoqda...')
-
-  try:
-    search_url = (
-        f'https://shikimori.one/api/animes?search={urllib.parse.quote(query)}&limit=1'
-    )
-    res = requests.get(search_url, headers=HEADERS, timeout=10)
-    data = res.json()
-
-    if not data:
-      await msg.edit_text(f'❌ Afsuski, *{query}* nomli anime topilmadi.')
-      return
-
-    anime_id = data[0]['id']
-    detail_res = requests.get(
-        f'https://shikimori.one/api/animes/{anime_id}',
-        headers=HEADERS,
-        timeout=10,
-    )
-    anime = detail_res.json()
-
-    title = anime.get('russian') or anime.get('name')
-    score = anime.get('score', 'N/A')
-    episodes = anime.get('episodes') or anime.get('episodes_Aired') or 'Noma\'lum'
-    description = anime.get('description') or ''
-    image_path = anime.get('image', {}).get('original')
-    image_url = (
-        f'https://shikimori.one{image_path}' if image_path else None
-    )
-
-    if description:
-      try:
-        translator = GoogleTranslator(source='auto', target='uz')
-        translated_synopsis = translator.translate(description[:350])
-      except Exception:
-        translated_synopsis = description[:350]
-    else:
-      translated_synopsis = 'Tavsif mavjud emas.'
-
-    caption = (
-        f'🎬 **{title}**\n\n⭐ **Baho:** {score}\n🎞 **Qismlar:**'
-        f' {episodes}\n\n📝 **Oʻzbekcha Tavsif:**\n{translated_synopsis}...'
-    )
-    encoded_title = urllib.parse.quote(title)
-    watch_keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[[
-            InlineKeyboardButton(
-                text='🎬 Telegramda tomosha qilish',
-                url=f'https://t.me/search?q={encoded_title}',
-            )
-        ]]
-    )
-
-    await msg.delete()
-    if image_url:
-      await message.answer_photo(
-          photo=image_url,
-          caption=caption,
-          reply_markup=watch_keyboard,
-          parse_mode='Markdown',
-      )
-    else:
-      await message.answer(
-          caption, reply_markup=watch_keyboard, parse_mode='Markdown'
-      )
-  except Exception:
-    await msg.edit_text('❌ Qidiruvda vaqtinchalik xatolik yuz berdi.')
-
-
-if __name__ == '__main__':
-  import asyncio
-
-  asyncio.run(dp.start_polling(bot))
-      
+if __name__ == "__main__":
+    bot.infinity_polling()
+        
